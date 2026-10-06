@@ -5,7 +5,7 @@
 
 | | |
 |---|---|
-|![GSF-NexFact-Logo](nexfact.png)| ***GSF-NexFact***<br>ein modulares System zur Erzeugung rechtssicherer elektronischer Rechnungen (ZUGFeRD/Factur-X). Es verbindet die Flexibilität von Go mit der Layout-Macht von LibreOffice und der Standard-Konformität des Mustang-Projekts.|
+|![GSF-NexFact-Logo](nexfact.png)| ***GSF-NexFact-Assets***<br>Ein dediziertes zentrales Testressourcen Repository für das **GSF-NexFact** e-invoicing ecosystem.|
 
 <sup>***GSF*** steht für ***Go Small Frameworks*** — minimalistische Tools für robuste Applicationen.</sup>
 
@@ -17,132 +17,98 @@ Das Projekt wird auf Codeberg entwickelt und gewartet.
 
 **Canonical repository:**
 
-> https://codeberg.org/tiny-frameworks/nexfact
+> https://codeberg.org/tiny-frameworks/nexfact-assets
 
 GitHub ist ein automatisierter Mirror des Codeberg Repositories
 
 **GitHub mirror:**
 
-> https://github.com/tiny-frameworks/nexfact
+> https://github.com/tiny-frameworks/nexfact-assets
 
 ---
 
-## GSF-NexFact
+## GSF-NexFact-Assets
 
-**GSF-NexFact** ist ein **modulares System** zur flexiblen Generierung, Analyse und Validierung
-von **ZUGFeRD- und Factur-X-E-Rechnungen** aus JSON-Daten. Es transformiert Eingaben
-in **XML, Standard-PDFs oder hybride ZUGFeRD-Rechnungen** (inkl. Anhängen) und
-nutzt dabei eine **dateibasierte Architektur** mit klaren Konventionen.
+`GSF-Nexfact-Assets` ist das zentrale Test-Asset-Repository für das **GSF-nexfact** E-Invoicing-Ökosystem. Es enthält gemeinsam genutzte Testumgebungen (`env`), Referenz-Ressourcen (Schemas, Templates, Mock-Profile) sowie Beispiel-Rechnungsdateien, die von `nexfact`, `nexfact-server` und verwandten Microservices verwendet werden.
+
+Durch die Auslagerung großer binärer Testdateien in dieses Repository bleiben die Kern-Repositories (`nexfact`, `nexfact-server`, `nexutils`) schlank und schnell zu klonen.
+
+Dieses Projekt ist Teil der **tiny-frameworks** Initiative.
 
 ---
 
-## Architektur & Kernprinzip: Convention over Configuration
+## Verzeichnisstruktur
 
-Das Gesamtsystem basiert auf einem strikt dateibasierten Datenaustausch über eine definierte
-Verzeichnisstruktur (`NEXFACT-env`). Der Go-Orchestrator steuert die Zustände, während
-spezialisierte Worker (Native oder in isolierten Containern) die Verzeichnisse überwachen
-und verarbeiten. Die Klammer zwischen Go, dem LibreOffice-Basic-Makro und der Mustang-Engine
-(Java) bildet eine standardisierte `RenderJob`-Datei.
+```text
+nexfact-assets/
+├── setup.go             # Erstellt isolierte Arbeitsverzeichnisse & freie dynamische Ports
+├── env/                 # nexfact Umgebungs-Templates & Schemas
+└── testdata/
+    └── resources/       # Test-Eingabedateien (PDFs, XMLs, JSON-Payloads, Bilder)
+        ├── test_generate_fx.json
+        ├── test_combine_invoice.pdf
+        ├── test_combine_invoice.xml
+        └── test_attachment.png
 
-```
-                +-----------------------+
-                |  nexfact-orchestrator |
-                +-----------+-----------+
-                            | (übernimmt die Orchestrierung, transformiert
-                            |  input-json in interne MasterZugFerd-Struct)
-                            v
-                +-----------------------+
-                |      nexfact-env      | <--- Gemeinsamer Zustand (Directories)
-                +-----------+-----------+
-                            |
-           +----------------+-------------+
-           v                              v
-+------------------------+     +-----------------------+
-|  PDF mit LibreOffice   |     |  ZUGFeRD mit Mustang  |
-| native oder Container  |     | native oder Container | (Worker)
-+------------------------+     +-----------------------+
 ```
 
 ---
 
-## Repository-Übersicht, Komponenten (Module), Dokumentation
+## Testausführung & Isolations-Muster
 
-Dieses Repository ist als Multi-Modul-Repository organisiert:
+Um sicherzustellen, dass Tests deterministisch und frei von Seiteneffekten bleiben, **dürfen Tests niemals direkt in dieses Asset-Repository schreiben**.
 
-- [`api`](./api/README.md): Kern-Schnittstellen, Types, Structs, Functions, zentrales Fehlerhandling. z.B.: `RenderJob`, `Error`, `Writer`
-- [`engines`](./engines/README.md): Verarbeitungs-Engines (`writer`), Synchronisation & Steuerung der Worker
-- [`orchestrator`](./orchestrator/README.md): Steuerungseinheit, Einstiegspunkt
-- [`examples`](./examples/main.go): Direkt lauffähige Code-Beispiel.
-- [`env`](./env/README.md): Verzeichnisstruktur & Konfigurationen
-- [`deployments`](./deployments/README.md): Container-Repos für Docker/Podman (PDF/Mustang)
+Stattdessen folgen die Tests dem **TempDir-Isolationsmuster**:
 
+```text
+┌───────────────────────────┐
+│      nexfact-assets       │ (Schreibgeschützte Master-Templates & Fixtures)
+└─────────────┬─────────────┘
+              │ 1. Kopieren bei Teststart
+              ▼
+┌───────────────────────────┐
+│        tempDir            │ (Isoliertes temporäres Arbeitsverzeichnis)
+│  ├── env/                 │
+│  └── resources/           │
+└─────────────┬─────────────┘
+              │ 2. Verarbeiten, Ausgaben schreiben & Prüfen
+              ▼
+┌───────────────────────────┐
+│     os.RemoveAll()        │ (Manuelles/Verzögertes Aufräumen durch Aufrufer)
+└───────────────────────────┘
 
-Hilfsmodule
-
-- [`cache`](https://codeberg.org/tiny-frameworks/nexutils/cache): Minimalistisches Caching-Modul
-- [`logger`](https://codeberg.org/tiny-frameworks/nexutils/logger): MultiLogger (Console/File) auf Basis `log/slog`
+```
 
 ---
 
-## Quick Start & Integration (Go API)
-
-Ein einfaches `main.go` - Snippet als Einstiegspunkt. Es werden hier Defaultwerte verwendet.
-
-Dies sind:
-- Die `env` - Struktur befindet sich auf neben der main.go im working-Directory.
-- Es wird der `default` - Seller verwendet. Zu finden in `env/sellers/default`.
-- Als Provider wird `native` verwendet. Zu sehen in `env/system/systm.yaml` (`zugferd_provider=native` und `pdf_provider=native`)
-
-Das dokumentierte und lauffähige Beispiel findest unter [examples](./examples/main.go) 
-Das containerized Pendant zu diesem main.go findest unter [deployments](./deployments.README.md) 
-Eine ausführliche und komplexe Vorlage, findest du im [orchestrator](./orchestrator/orchestrator_suite_test.go). 
+## Verwendung in Tests
 
 ```go
-package main
+import "codeberg.org/tiny-frameworks/nexfact-assets"
 
-import (
-	// standard imports"
-	// nexfact imports"
-)
+func TestMyServer(t *testing.T) {
+    setupMap, err := assets.SetupTestEnv("native")
+    if err != nil {
+        t.Fatalf("Fehler beim Erstellen der Testumgebung: %v", err)
+    }
 
-func main() {
+    envRoot := setupMap["envRoot"]
+    resourcePath := setupMap["resourcePath"]
+    tempDir := setupMap["tempDir"]
+    defer os.RemoveAll(tempDir)
 
-	// Required only for the local monorepo example:
-	os.Setenv(orchestrator.EnvRootKey, "../env")
-
-	orch, err := orchestrator.NewDefault()
-	if err != nil {
-		nexerrors.LogError(logger.Logger, err)
-		os.Exit(nexerrors.GetExitCode(err))
-	}
-
-	// 2. Execute job (expects JSON payload for the toolchain)
-	jsonPayload := jsonJob()
-	result, err := orch.RunJsonJob(jsonPayload)
-	if err != nil {
-		nexerrors.LogError(logger.Logger, err)
-		os.Exit(nexerrors.GetExitCode(err))
-	}
-
-	logger.Logger.Info("Job succeeded", "JobID:", result.JobID, "OutputPath", result.OutputPath)
-	if err := openPDF(result.OutputPath); err != nil {
-		nexerrors.LogError(logger.Logger, err)
-		os.Exit(nexerrors.GetExitCode(err))
-	}
-	os.Exit(0)
-}
-
-func openPDF(filePath string) error {
-    // go-code to open the generated pdf-file	
-    // see: examples/main.go
-}
-
-func jsonJob() []byte {
-    // bytestream for a minimal sample zugferd-invoice
-    // see: examples/main.go
+    // ... Tests ausführen ...
 }
 
 ```
+
+---
+
+## Lokale Entwicklung
+
+Dieses Repository ist für die gemeinsame Nutzung mit anderen `tiny-frameworks`-Modulen (`nexfact`, `nexfact-server`, `nexutils`) ausgelegt.
+
+Für die lokale Entwicklung empfiehlt es sich, die Repositories nebeneinander in einem gemeinsamen Workspace-Verzeichnis abzulegen.
 
 ---
 
@@ -163,4 +129,3 @@ Für Anfragen, architektonische Diskussionen oder Sicherheitsfragen wende dich b
 📧 **georghagn [at] tiny-frameworks.io**
 
 ---
-

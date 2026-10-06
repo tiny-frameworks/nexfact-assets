@@ -26,12 +26,14 @@ GitHub is an automated mirror of the Codeberg repository:
 > https://github.com/tiny-frameworks/nexfact-assets
 
 ---
-
 ## GSF-NexFact-Assets
 
-`GSF-nexfact-assets` is the dedicated central test asset repository for the **GSF-nexfact** e-invoicing ecosystem. It stores shared test environments (`env`), reference resources (schemas, templates, mock profiles), and sample invoice files used across `nexfact`, `nexfact-server`, and related microservices.
+`GSF-nexfact-assets` is the dedicated central test asset repository for the **GSF-nexfact** e-invoicing
+ecosystem. It stores shared test environments (`env`), reference resources (schemas, templates, mock
+profiles), and sample invoice files used across `nexfact`, `nexfact-server`, and related microservices.
 
-By isolating heavy binary test fixtures into this repository, core source repositories (`nexfact`, `nexfact-server`, `nexutils`) remain lightweight and fast to clone.
+By isolating heavy binary test fixtures into this repository, core source
+repositories (`nexfact`, `nexfact-server`, `nexutils`) remain lightweight and fast to clone.
 
 This project is part of the **tiny-frameworks** initiative.
 
@@ -41,7 +43,7 @@ This project is part of the **tiny-frameworks** initiative.
 
 ```text
 nexfact-assets/
-├── setup-go             # creates isolated working-directory and tcp-addresses
+├── setup.go             # Creates isolated working directory & free dynamic ports
 ├── env/                 # Reference nexfact environment templates & schemas
 └── testdata/
     └── resources/       # Test input files (PDFs, XMLs, JSON payloads, images)
@@ -52,55 +54,68 @@ nexfact-assets/
 
 ```
 
+---
+
 ## Test Execution & Isolation Pattern
 
-To guarantee that tests remain strictly deterministic and side-effect-free, **tests must never write directly to this asset repository**.
+To guarantee that tests remain strictly deterministic and side-effect-free, **tests must
+never write directly to this asset repository**.
 
 Instead, tests follow the **TempDir Isolation Pattern**:
 
 ```text
 ┌───────────────────────────┐
-│     nexfact-assets        │ (Read-Only Master Templates & Fixtures)
+│      nexfact-assets       │ (Read-Only Master Templates & Fixtures)
 └─────────────┬─────────────┘
               │ 1. Copy on Test Startup
               ▼
 ┌───────────────────────────┐
-│       t.TempDir()         │ (Isolated Working Directory)
+│        tempDir            │ (Isolated Temporary Working Directory)
 │  ├── env/                 │
 │  └── resources/           │
 └─────────────┬─────────────┘
               │ 2. Process, Write Output & Assert
               ▼
 ┌───────────────────────────┐
-│   Automatic OS Cleanup    │ (Triggered by Go test framework upon completion)
+│     os.RemoveAll()        │ (Manual/Deferred Cleanup by Caller)
 └───────────────────────────┘
 
 ```
 
 ---
 
-## Local Development (`go.work`)
+## Usage in Tests
 
-This repository is designed to be developed as part of a multi-module workspace alongside related `tiny-frameworks` projects. 
+```go
+import "codeberg.org/tiny-frameworks/nexfact-assets"
 
-To set up a local development environment, place the repositories side-by-side in a common workspace directory and initialize a `go.work` file:
+func TestMyServer(t *testing.T) {
+    setupMap, err := assets.SetupTestEnv("native")
+    if err != nil {
+        t.Fatalf("failed to create testSetup: %v", err)
+    }
 
-```bash
-mkdir workspace && cd workspace
-git clone [https://codeberg.org/tiny-frameworks/nexfact.git](https://codeberg.org/tiny-frameworks/nexfact.git)
-git clone [https://codeberg.org/tiny-frameworks/nexfact-server.git](https://codeberg.org/tiny-frameworks/nexfact-server.git)
-git clone [https://codeberg.org/tiny-frameworks/nexutils.git](https://codeberg.org/tiny-frameworks/nexutils.git)
-git clone [https://codeberg.org/tiny-frameworks/nexfact-assets.git](https://codeberg.org/tiny-frameworks/nexfact-assets.git)
+    envRoot := setupMap["envRoot"]
+    resourcePath := setupMap["resourcePath"]
+    tempDir := setupMap["tempDir"]
+    defer os.RemoveAll(tempDir)
 
-go work init ./nexfact ./nexfact-server ./nexutils
+    // ... execute tests ...
+}
 
 ```
 
-This setup ensures that Go tools (and tests) resolve local inter-module dependencies seamlessly without needing local `replace` directives in `go.mod`.
+---
+
+## Local Development
+
+This repository is designed to be used alongside related `tiny-frameworks` modules (`nexfact`, `nexfact-server`, `nexutils`).
+
+For local development, place the repositories side-by-side in a shared workspace directory.
 
 ---
 
-## Organizational & Standards
+## Organization & Standards
 
 * **Copyright:** © 2026 Georg Hagn.
 * **Repository:** `codeberg.org/tiny-frameworks/nexfact-assets`
