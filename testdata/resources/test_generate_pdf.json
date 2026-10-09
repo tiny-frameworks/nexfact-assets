@@ -5,7 +5,7 @@
   "options": {
     "queue": "generate_pdf",
     "pdf": "",
-    "template": "invoiceMax.ott",
+    "template": "testdata/resources/test_generate_max_template.ott",
    "attachments": [
     ]
   },

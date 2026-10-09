@@ -5,10 +5,10 @@
   "options": {
     "queue": "facturx",
     "pdf": "",
-    "template": "testdata/data/test_generate_max_template.ott",
+    "template": "testdata/resources/test_generate_max_template.ott",
     "attachments": [
-        "testdata/data/test_attachment.png",
-        "testdata/data/test_attachment.pdf"
+        "testdata/resources/test_attachment.png",
+        "testdata/resources/test_attachment.pdf"
     ],
   },
   "invoice": {
